@@ -8,7 +8,7 @@ const { Op } = require('sequelize');
 const calculatePrice = (specifications) => {
   const { duration, speakers, turnaroundTime, timestampFrequency, isVerbatim } = specifications;
 
-  // Base rates per minute
+  // Base rates per minute (turnaround time)
   const baseRates = {
     '3days': 0.9,
     '1.5days': 1.2,
@@ -16,13 +16,23 @@ const calculatePrice = (specifications) => {
   };
 
   let rate = baseRates[turnaroundTime] || 0.9;
+  let breakdown = {
+    baseRate: baseRates[turnaroundTime] || 0.9,
+    speakerMultiplier: 0,
+    timestampMultiplier: 0,
+    verbatimMultiplier: 0
+  };
 
-  // Speaker multiplier
-  if (speakers >= 3) {
+  // Speaker modifier
+  if (speakers === 2) {
+    rate += 0.3;
+    breakdown.speakerMultiplier = 0.3;
+  } else if (speakers >= 3) {
     rate += 0.35;
+    breakdown.speakerMultiplier = 0.35;
   }
 
-  // Timestamp multiplier
+  // Timestamp frequency modifier
   const timestampRates = {
     'speaker': 0.3,
     '2min': 0.2,
@@ -30,26 +40,25 @@ const calculatePrice = (specifications) => {
     '10sec': 0.6
   };
 
-  rate += timestampRates[timestampFrequency] || 0.3;
+  const timestampMod = timestampRates[timestampFrequency] || 0.3;
+  rate += timestampMod;
+  breakdown.timestampMultiplier = timestampMod;
 
-  // Verbatim multiplier
+  // Full verbatim modifier
   if (isVerbatim) {
     rate += 0.2;
+    breakdown.verbatimMultiplier = 0.2;
   }
 
-  // Calculate total (duration in minutes * rate * 60 for NGN conversion)
-  const totalPrice = Math.ceil((duration / 60) * rate * 60);
+  breakdown.finalRate = parseFloat(rate.toFixed(2));
+
+  // Calculate total price (duration in minutes * rate per minute)
+  const totalPrice = parseFloat((duration * rate).toFixed(2));
 
   return {
     rate: parseFloat(rate.toFixed(2)),
     totalPrice,
-    breakdown: {
-      baseRate: baseRates[turnaroundTime],
-      speakerMultiplier: speakers >= 3 ? 0.35 : 0,
-      timestampMultiplier: timestampRates[timestampFrequency] || 0.3,
-      verbatimMultiplier: isVerbatim ? 0.2 : 0,
-      finalRate: rate
-    }
+    breakdown
   };
 };
 
@@ -88,7 +97,7 @@ const createOrder = async (req, res) => {
     const order = await Order.create({
       userId: req.user.userId,
       amount: pricing.totalPrice,
-      currency: 'NGN',
+      currency: 'USD',
       paymentReference,
       specifications,
       customerInfo,

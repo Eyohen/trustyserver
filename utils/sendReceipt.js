@@ -65,22 +65,22 @@
 //             <tr style="border-bottom: 1px solid #eeeeee;">
 //                 <td style="padding: 15px 10px;">${item.title}</td>
 //                 <td style="padding: 15px 10px; text-align: right;">${item.quantity}</td>
-//                 <td style="padding: 15px 10px; text-align: right;">₦${item.totalPrice.toFixed(2)}</td>
+//                 <td style="padding: 15px 10px; text-align: right;">$${item.totalPrice.toFixed(2)}</td>
 //             </tr>
 //              `).join('')}
 
 //             <!-- Summary -->
 //             <tr style="background-color: #f9f9f9;">
 //                 <td colspan="2" style="padding: 15px 10px; text-align: right;"><strong>Subtotal:</strong></td>
-//                 <td style="padding: 15px 10px; text-align: right;">₦${totalAmount.toFixed(2)}</td>
+//                 <td style="padding: 15px 10px; text-align: right;">$${totalAmount.toFixed(2)}</td>
 //             </tr>
 //             <tr style="background-color: #f9f9f9;">
 //                 <td colspan="2" style="padding: 15px 10px; text-align: right;"><strong>VAT (15%):</strong></td>
-//                 <td style="padding: 15px 10px; text-align: right;">₦${(totalAmount * 0.15).toFixed(2)}</td>
+//                 <td style="padding: 15px 10px; text-align: right;">$${(totalAmount * 0.15).toFixed(2)}</td>
 //             </tr>
 //             <tr style="background-color: #f9f9f9;">
 //                 <td colspan="2" style="padding: 15px 10px; text-align: right;"><strong>Total:</strong></td>
-//                 <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: #023020;">₦${(totalAmount * 1.15).toFixed(2)}</td>
+//                 <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: #023020;">$${(totalAmount * 1.15).toFixed(2)}</td>
 //             </tr>
 //         </table>
 
@@ -195,22 +195,22 @@ module.exports = async (from, email, subject, text, customerName, orderId, total
             <tr style="border-bottom: 1px solid #eeeeee;">
                 <td style="padding: 15px 10px;">${item.title}</td>
                 <td style="padding: 15px 10px; text-align: right;">${item.quantity}</td>
-                <td style="padding: 15px 10px; text-align: right;">₦${item.totalPrice.toFixed(2)}</td>
+                <td style="padding: 15px 10px; text-align: right;">$${item.totalPrice.toFixed(2)}</td>
             </tr>
              `).join('')}
 
             <!-- Summary -->
             <tr style="background-color: #f9f9f9;">
                 <td colspan="2" style="padding: 15px 10px; text-align: right;"><strong>Subtotal:</strong></td>
-                <td style="padding: 15px 10px; text-align: right;">₦${totalAmount.toFixed(2)}</td>
+                <td style="padding: 15px 10px; text-align: right;">$${totalAmount.toFixed(2)}</td>
             </tr>
             <tr style="background-color: #f9f9f9;">
                 <td colspan="2" style="padding: 15px 10px; text-align: right;"><strong>VAT (15%):</strong></td>
-                <td style="padding: 15px 10px; text-align: right;">₦${(totalAmount * 0.15).toFixed(2)}</td>
+                <td style="padding: 15px 10px; text-align: right;">$${(totalAmount * 0.15).toFixed(2)}</td>
             </tr>
             <tr style="background-color: #f9f9f9;">
                 <td colspan="2" style="padding: 15px 10px; text-align: right;"><strong>Total:</strong></td>
-                <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: #023020;">₦${(totalAmount * 1.15).toFixed(2)}</td>
+                <td style="padding: 15px 10px; text-align: right; font-weight: bold; color: #023020;">$${(totalAmount * 1.15).toFixed(2)}</td>
             </tr>
         </table>
 

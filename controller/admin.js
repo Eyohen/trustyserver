@@ -263,7 +263,7 @@ const getActivityFeed = async (req, res) => {
         type: 'order',
         id: order.id,
         title: `New order ${order.orderNumber}`,
-        description: `₦${order.amount} - ${order.paymentStatus}`,
+        description: `$${order.amount} - ${order.paymentStatus}`,
         user: order.user,
         timestamp: order.createdAt
       })),

@@ -45,7 +45,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     currency: {
       type: DataTypes.STRING,
-      defaultValue: 'NGN',
+      defaultValue: 'USD',
       allowNull: false
     },
     paymentStatus: {
