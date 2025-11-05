@@ -1,5 +1,6 @@
 // controllers/orderController.js
 const crypto = require('crypto');
+const https = require('https');
 const db = require('../models');
 const { Order, User, Transcript } = db;
 const { Op } = require('sequelize');
@@ -8,47 +9,62 @@ const { Op } = require('sequelize');
 const calculatePrice = (specifications) => {
   const { duration, speakers, turnaroundTime, timestampFrequency, isVerbatim } = specifications;
 
-  // Base rates per minute (turnaround time)
-  const baseRates = {
-    '3days': 0.9,
-    '1.5days': 1.2,
-    '6-12hrs': 1.5
-  };
+  // Base rates per minute based on verbatim type, speakers, and turnaround
+  let rate = 0;
 
-  let rate = baseRates[turnaroundTime] || 0.9;
-  let breakdown = {
-    baseRate: baseRates[turnaroundTime] || 0.9,
-    speakerMultiplier: 0,
-    timestampMultiplier: 0,
-    verbatimMultiplier: 0
-  };
-
-  // Speaker modifier
-  if (speakers === 2) {
-    rate += 0.3;
-    breakdown.speakerMultiplier = 0.3;
-  } else if (speakers >= 3) {
-    rate += 0.35;
-    breakdown.speakerMultiplier = 0.35;
+  if (!isVerbatim) {
+    // CLEAN VERBATIM
+    if (speakers === 2) {
+      const cleanVerbatim2Speakers = {
+        '3days': 0.9,
+        '1.5days': 1.2,
+        '6-12hrs': 1.5
+      };
+      rate = cleanVerbatim2Speakers[turnaroundTime] || 0.9;
+    } else if (speakers >= 3) {
+      const cleanVerbatim3Speakers = {
+        '3days': 1.25,
+        '1.5days': 1.2,
+        '6-12hrs': 1.5
+      };
+      rate = cleanVerbatim3Speakers[turnaroundTime] || 1.25;
+    }
+  } else {
+    // FULL VERBATIM
+    if (speakers === 2) {
+      const fullVerbatim2Speakers = {
+        '3days': 1.1,
+        '1.5days': 1.4,
+        '6-12hrs': 1.7
+      };
+      rate = fullVerbatim2Speakers[turnaroundTime] || 1.1;
+    } else if (speakers >= 3) {
+      const fullVerbatim3Speakers = {
+        '3days': 1.45,
+        '1.5days': 1.2,
+        '6-12hrs': 2.7
+      };
+      rate = fullVerbatim3Speakers[turnaroundTime] || 1.45;
+    }
   }
+
+  let breakdown = {
+    baseRate: rate,
+    timestampMultiplier: 0
+  };
 
   // Timestamp frequency modifier
   const timestampRates = {
+    'none': 0.0,
     'speaker': 0.3,
     '2min': 0.2,
     '30sec': 0.4,
     '10sec': 0.6
   };
 
-  const timestampMod = timestampRates[timestampFrequency] || 0.3;
+  const timestampMod = timestampRates[timestampFrequency] || 0.0;
   rate += timestampMod;
   breakdown.timestampMultiplier = timestampMod;
-
-  // Full verbatim modifier
-  if (isVerbatim) {
-    rate += 0.2;
-    breakdown.verbatimMultiplier = 0.2;
-  }
 
   breakdown.finalRate = parseFloat(rate.toFixed(2));
 
@@ -121,7 +137,7 @@ const createOrder = async (req, res) => {
   }
 };
 
-// Verify payment (called from frontend after Paystack payment)
+// Verify payment with Paystack API (called from frontend after Paystack payment)
 const verifyPayment = async (req, res) => {
   try {
     const { paymentReference, paystackReference, paymentData } = req.body;
@@ -131,7 +147,7 @@ const verifyPayment = async (req, res) => {
     }
 
     const order = await Order.findOne({
-      where: { 
+      where: {
         paymentReference,
         userId: req.user.userId,
         paymentStatus: 'pending'
@@ -142,13 +158,90 @@ const verifyPayment = async (req, res) => {
       return res.status(404).json({ message: 'Order not found or already processed' });
     }
 
-    // Since payment verification happens on frontend with Paystack inline,
-    // we trust the frontend verification and update the order
+    // Verify payment with Paystack API
+    const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!paystackSecretKey) {
+      console.error('PAYSTACK_SECRET_KEY not configured');
+      return res.status(500).json({ message: 'Payment verification not properly configured' });
+    }
+
+    // Make request to Paystack verification endpoint
+    const paystackVerification = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.paystack.co',
+        port: 443,
+        path: `/transaction/verify/${paystackReference}`,
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${paystackSecretKey}`
+        }
+      };
+
+      const paystackReq = https.request(options, (paystackRes) => {
+        let data = '';
+
+        paystackRes.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        paystackRes.on('end', () => {
+          try {
+            const parsedData = JSON.parse(data);
+            resolve(parsedData);
+          } catch (error) {
+            reject(new Error('Failed to parse Paystack response'));
+          }
+        });
+      });
+
+      paystackReq.on('error', (error) => {
+        reject(error);
+      });
+
+      paystackReq.end();
+    });
+
+    // Check if payment was successful
+    if (!paystackVerification.status || !paystackVerification.data) {
+      console.error('Paystack verification failed:', paystackVerification);
+      await order.update({ paymentStatus: 'failed' });
+      return res.status(400).json({
+        message: 'Payment verification failed',
+        details: paystackVerification.message || 'Unknown error'
+      });
+    }
+
+    const verifiedData = paystackVerification.data;
+
+    // Verify payment status
+    if (verifiedData.status !== 'success') {
+      await order.update({ paymentStatus: 'failed' });
+      return res.status(400).json({
+        message: 'Payment was not successful',
+        status: verifiedData.status
+      });
+    }
+
+    // Verify amount matches (Paystack returns amount in kobo/cents)
+    const expectedAmountInCents = Math.round(order.amount * 100);
+    if (verifiedData.amount !== expectedAmountInCents) {
+      console.error('Amount mismatch:', {
+        expected: expectedAmountInCents,
+        received: verifiedData.amount
+      });
+      await order.update({ paymentStatus: 'failed' });
+      return res.status(400).json({
+        message: 'Payment amount mismatch. Please contact support.'
+      });
+    }
+
+    // Update order as paid
     await order.update({
       paymentStatus: 'paid',
       paystackReference,
       paidAt: new Date(),
-      paymentMethod: paymentData?.channel || 'card' // from Paystack response
+      paymentMethod: verifiedData.channel || 'card'
     });
 
     // Fetch updated order with user info

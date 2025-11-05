@@ -137,7 +137,7 @@ const validateTranscript = [
     .withMessage('Invalid turnaround time'),
   
   body('timestampFrequency')
-    .isIn(['speaker', '2min', '30sec', '10sec'])
+    .isIn(['none', 'speaker', '2min', '30sec', '10sec'])
     .withMessage('Invalid timestamp frequency'),
   
   body('isVerbatim')
@@ -191,7 +191,7 @@ const validateOrder = [
     .withMessage('Invalid turnaround time'),
   
   body('timestampFrequency')
-    .isIn(['speaker', '2min', '30sec', '10sec'])
+    .isIn(['none', 'speaker', '2min', '30sec', '10sec'])
     .withMessage('Invalid timestamp frequency'),
   
   body('isVerbatim')
@@ -213,6 +213,7 @@ const validateOrder = [
     .withMessage('Valid customer email is required'),
   
   body('customerInfo.phone')
+    .optional()
     .isMobilePhone()
     .withMessage('Valid customer phone number is required'),
   
