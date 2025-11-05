@@ -109,9 +109,15 @@ const createOrder = async (req, res) => {
     // Generate unique payment reference
     const paymentReference = `TT-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
+    // Generate order number
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const orderNumber = `TT-${timestamp.slice(-6)}${random}`;
+
     // Create order
     const order = await Order.create({
       userId: req.user.userId,
+      orderNumber,
       amount: pricing.totalPrice,
       currency: 'USD',
       paymentReference,
