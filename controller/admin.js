@@ -2,6 +2,9 @@
 const db = require('../models');
 const { User, Transcript, Order } = db;
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
 
 // Dashboard analytics
 const getDashboardAnalytics = async (req, res) => {
@@ -289,8 +292,452 @@ const getActivityFeed = async (req, res) => {
   }
 };
 
+// Get all orders with pagination and filters
+const getAllOrders = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (status) {
+      where.paymentStatus = status;
+    }
+
+    const { count, rows: orders } = await Order.findAndCountAll({
+      where,
+      limit: parseInt(limit),
+      offset,
+      order: [[sortBy, sortOrder]],
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone']
+        },
+        {
+          model: Transcript,
+          as: 'transcript',
+          attributes: ['id', 'title', 'status', 'originalFileName']
+        }
+      ]
+    });
+
+    res.json({
+      orders,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / parseInt(limit))
+      }
+    });
+
+  } catch (error) {
+    console.error('Get all orders error:', error);
+    res.status(500).json({
+      message: 'Failed to get orders',
+      error: error.message
+    });
+  }
+};
+
+// Get all transcripts with pagination and filters
+const getAllTranscripts = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (status) {
+      where.status = status;
+    }
+
+    const { count, rows: transcripts } = await Transcript.findAndCountAll({
+      where,
+      limit: parseInt(limit),
+      offset,
+      order: [[sortBy, sortOrder]],
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'phone']
+        },
+        {
+          model: Order,
+          as: 'order',
+          attributes: ['id', 'orderNumber', 'paymentStatus', 'amount']
+        },
+        {
+          model: User,
+          as: 'assignedAdmin',
+          attributes: ['id', 'firstName', 'lastName', 'email']
+        }
+      ]
+    });
+
+    res.json({
+      transcripts,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / parseInt(limit))
+      }
+    });
+
+  } catch (error) {
+    console.error('Get all transcripts error:', error);
+    res.status(500).json({
+      message: 'Failed to get transcripts',
+      error: error.message
+    });
+  }
+};
+
+// Get all users with pagination
+const getAllUsers = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      role,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (role) {
+      where.role = role;
+    }
+
+    const { count, rows: users } = await User.findAndCountAll({
+      where,
+      limit: parseInt(limit),
+      offset,
+      order: [[sortBy, sortOrder]],
+      attributes: { exclude: ['password'] },
+      include: [
+        {
+          model: Order,
+          as: 'orders',
+          attributes: ['id', 'orderNumber', 'amount', 'paymentStatus']
+        },
+        {
+          model: Transcript,
+          as: 'transcripts',
+          attributes: ['id', 'title', 'status']
+        }
+      ]
+    });
+
+    res.json({
+      users,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / parseInt(limit))
+      }
+    });
+
+  } catch (error) {
+    console.error('Get all users error:', error);
+    res.status(500).json({
+      message: 'Failed to get users',
+      error: error.message
+    });
+  }
+};
+
+// Update transcript status and assign to admin
+const updateTranscriptStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, assignedTo, adminNotes, transcriptContent } = req.body;
+
+    const transcript = await Transcript.findByPk(id);
+
+    if (!transcript) {
+      return res.status(404).json({ message: 'Transcript not found' });
+    }
+
+    // Update fields
+    if (status) transcript.status = status;
+    if (assignedTo !== undefined) transcript.assignedTo = assignedTo;
+    if (adminNotes !== undefined) transcript.adminNotes = adminNotes;
+    if (transcriptContent !== undefined) transcript.transcriptContent = transcriptContent;
+
+    // Update timestamps based on status
+    if (status === 'processing' && !transcript.startedAt) {
+      transcript.startedAt = new Date();
+    } else if (status === 'completed' && !transcript.completedAt) {
+      transcript.completedAt = new Date();
+    } else if (status === 'delivered' && !transcript.deliveredAt) {
+      transcript.deliveredAt = new Date();
+    }
+
+    await transcript.save();
+
+    // Fetch updated transcript with relationships
+    const updatedTranscript = await Transcript.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email']
+        },
+        {
+          model: Order,
+          as: 'order',
+          attributes: ['id', 'orderNumber', 'paymentStatus']
+        }
+      ]
+    });
+
+    res.json({
+      message: 'Transcript updated successfully',
+      transcript: updatedTranscript
+    });
+
+  } catch (error) {
+    console.error('Update transcript status error:', error);
+    res.status(500).json({
+      message: 'Failed to update transcript',
+      error: error.message
+    });
+  }
+};
+
+// Update order status
+const updateOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentStatus, adminNotes } = req.body;
+
+    const order = await Order.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (paymentStatus) order.paymentStatus = paymentStatus;
+    if (adminNotes !== undefined) order.adminNotes = adminNotes;
+
+    if (paymentStatus === 'paid' && !order.paidAt) {
+      order.paidAt = new Date();
+    }
+
+    await order.save();
+
+    const updatedOrder = await Order.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email']
+        }
+      ]
+    });
+
+    res.json({
+      message: 'Order updated successfully',
+      order: updatedOrder
+    });
+
+  } catch (error) {
+    console.error('Update order status error:', error);
+    res.status(500).json({
+      message: 'Failed to update order',
+      error: error.message
+    });
+  }
+};
+
+// Configure multer for completed transcript uploads
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../uploads/completed');
+    try {
+      await fs.mkdir(uploadPath, { recursive: true });
+      cb(null, uploadPath);
+    } catch (error) {
+      cb(error);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const sanitizedOriginalName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${uniqueSuffix}-${sanitizedOriginalName}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['.pdf', '.docx', '.doc', '.txt'];
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (allowedTypes.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, DOCX, DOC, and TXT files are allowed.'), false);
+  }
+};
+
+const uploadCompletedFile = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB limit
+  }
+}).single('file');
+
+// Upload completed transcript file
+const uploadTranscriptFile = async (req, res) => {
+  try {
+    uploadCompletedFile(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({
+          message: err.message || 'File upload failed',
+          error: err.code
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: 'File is required' });
+      }
+
+      const { id } = req.params;
+      const transcript = await Transcript.findByPk(id);
+
+      if (!transcript) {
+        return res.status(404).json({ message: 'Transcript not found' });
+      }
+
+      // Update transcript with file path
+      transcript.transcriptFilePath = req.file.path;
+      transcript.status = 'completed';
+
+      if (!transcript.completedAt) {
+        transcript.completedAt = new Date();
+      }
+
+      await transcript.save();
+
+      res.json({
+        message: 'Transcript file uploaded successfully',
+        transcript: {
+          id: transcript.id,
+          transcriptFilePath: transcript.transcriptFilePath,
+          status: transcript.status
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Upload transcript file error:', error);
+    res.status(500).json({
+      message: 'Failed to upload transcript file',
+      error: error.message
+    });
+  }
+};
+
+// Download transcript file (for admin)
+const downloadTranscriptFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transcript = await Transcript.findByPk(id);
+
+    if (!transcript) {
+      return res.status(404).json({ message: 'Transcript not found' });
+    }
+
+    if (!transcript.transcriptFilePath) {
+      return res.status(404).json({ message: 'Transcript file not found' });
+    }
+
+    const filePath = transcript.transcriptFilePath;
+
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch (err) {
+      return res.status(404).json({ message: 'File not found on server' });
+    }
+
+    res.download(filePath, transcript.originalFileName || 'transcript.pdf');
+
+  } catch (error) {
+    console.error('Download transcript file error:', error);
+    res.status(500).json({
+      message: 'Failed to download transcript file',
+      error: error.message
+    });
+  }
+};
+
+// Download original audio file (for admin)
+const downloadAudioFile = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transcript = await Transcript.findByPk(id);
+
+    if (!transcript) {
+      return res.status(404).json({ message: 'Transcript not found' });
+    }
+
+    if (!transcript.filePath) {
+      return res.status(404).json({ message: 'Audio file not found' });
+    }
+
+    const filePath = transcript.filePath;
+
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch (err) {
+      return res.status(404).json({ message: 'File not found on server' });
+    }
+
+    res.download(filePath, transcript.originalFileName || 'audio.mp3');
+
+  } catch (error) {
+    console.error('Download audio file error:', error);
+    res.status(500).json({
+      message: 'Failed to download audio file',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getDashboardAnalytics,
   getSystemStats,
-  getActivityFeed
+  getActivityFeed,
+  getAllOrders,
+  getAllTranscripts,
+  getAllUsers,
+  updateTranscriptStatus,
+  updateOrderStatus,
+  uploadTranscriptFile,
+  downloadTranscriptFile,
+  downloadAudioFile
 };

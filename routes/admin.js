@@ -4,7 +4,15 @@ const express = require('express');
 const {
   getDashboardAnalytics,
   getSystemStats,
-  getActivityFeed
+  getActivityFeed,
+  getAllOrders,
+  getAllTranscripts,
+  getAllUsers,
+  updateTranscriptStatus,
+  updateOrderStatus,
+  uploadTranscriptFile,
+  downloadTranscriptFile,
+  downloadAudioFile
 } = require('../controller/admin');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 
@@ -17,5 +25,19 @@ router.use(verifyToken, requireAdmin);
 router.get('/analytics', getDashboardAnalytics);
 router.get('/stats', getSystemStats);
 router.get('/activity', getActivityFeed);
+
+// Data management routes
+router.get('/orders', getAllOrders);
+router.get('/transcripts', getAllTranscripts);
+router.get('/users', getAllUsers);
+
+// Update routes
+router.patch('/transcripts/:id', updateTranscriptStatus);
+router.patch('/orders/:id', updateOrderStatus);
+
+// File management routes
+router.post('/transcripts/:id/upload', uploadTranscriptFile);
+router.get('/transcripts/:id/download', downloadTranscriptFile);
+router.get('/transcripts/:id/audio', downloadAudioFile);
 
 module.exports = router;
