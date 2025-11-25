@@ -26,13 +26,13 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg'];
+  const allowedTypes = ['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.mp4'];
   const ext = path.extname(file.originalname).toLowerCase();
-  
+
   if (allowedTypes.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only audio files are allowed.'), false);
+    cb(new Error('Invalid file type. Only audio/video files are allowed.'), false);
   }
 };
 
@@ -393,14 +393,30 @@ const downloadTranscript = async (req, res) => {
       return res.status(404).json({ message: 'Transcript not found or not completed' });
     }
 
+    // Check if transcript file was uploaded by admin
+    if (transcript.transcriptFilePath) {
+      const filePath = transcript.transcriptFilePath;
+
+      // Check if file exists
+      try {
+        await fs.access(filePath);
+      } catch (err) {
+        return res.status(404).json({ message: 'Transcript file not found on server' });
+      }
+
+      // Download the file
+      return res.download(filePath, `${transcript.title}_transcript${path.extname(filePath)}`);
+    }
+
+    // Fall back to text content stored in database
     if (!transcript.transcriptContent) {
       return res.status(400).json({ message: 'Transcript content not available' });
     }
 
-    // Set response headers for file download
+    // Set response headers for text download
     res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Content-Disposition', `attachment; filename="${transcript.title}_transcript.txt"`);
-    
+
     res.send(transcript.transcriptContent);
 
   } catch (error) {

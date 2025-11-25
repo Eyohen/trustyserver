@@ -8,12 +8,20 @@ const { User } = db;
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Access token required' });
+    let token;
+
+    // Check Authorization header first
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+    // Fall back to query parameter (for file downloads)
+    else if (req.query.token) {
+      token = req.query.token;
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'Access token required' });
+    }
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     

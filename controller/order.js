@@ -109,6 +109,15 @@ const createOrder = async (req, res) => {
     // Calculate pricing
     const pricing = calculatePrice(specifications);
 
+    // Validate Paystack minimum transaction amount ($2.00 USD)
+    if (pricing.totalPrice < 2.00) {
+      return res.status(400).json({
+        message: 'Minimum transaction amount is $2.00 USD. Please increase your order duration or select additional options.',
+        minimumAmount: 2.00,
+        currentAmount: pricing.totalPrice
+      });
+    }
+
     // Generate unique payment reference
     const paymentReference = `TT-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
